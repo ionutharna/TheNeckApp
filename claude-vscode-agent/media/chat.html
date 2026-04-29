@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<title>Claude Agent</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--vscode-panel-border, #333);
+    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    flex-shrink: 0;
+  }
+
+  #header h1 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  #header h1::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cc785c;
+  }
+
+  #clear-btn {
+    background: none;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 3px 7px;
+    border-radius: 3px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+  #clear-btn:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
+
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 0;
+    scroll-behavior: smooth;
+  }
+
+  .message {
+    padding: 6px 16px;
+    line-height: 1.6;
+    animation: fadeIn 0.15s ease;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .message.user {
+    color: var(--vscode-editor-foreground);
+    border-left: 2px solid var(--vscode-focusBorder, #007acc);
+    padding-left: 14px;
+    margin: 8px 16px;
+    background: var(--vscode-editor-inactiveSelectionBackground, rgba(255,255,255,0.04));
+    border-radius: 0 4px 4px 0;
+    padding: 8px 12px 8px 12px;
+    border-left: 3px solid var(--vscode-focusBorder, #007acc);
+  }
+
+  .message.assistant {
+    color: var(--vscode-editor-foreground);
+    padding: 4px 16px;
+  }
+
+  .message .label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 5px;
+  }
+
+  .message.user .label { color: var(--vscode-focusBorder, #007acc); }
+  .message.assistant .label { color: #cc785c; }
+
+  .tool-call {
+    margin: 6px 16px;
+    padding: 6px 10px;
+    background: var(--vscode-terminal-background, rgba(255,255,255,0.03));
+    border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.1));
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tool-call::before { content: '⚙'; opacity: 0.6; }
+
+  .thinking-indicator {
+    padding: 8px 16px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.7;
+  }
+
+  .dots {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .dots span {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bounce 1.2s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* Markdown rendering */
+  .content p { margin: 0 0 10px; }
+  .content p:last-child { margin-bottom: 0; }
+  .content h1, .content h2, .content h3 {
+    margin: 14px 0 6px;
+    font-weight: 600;
+    color: var(--vscode-editor-foreground);
+  }
+  .content h1 { font-size: 1.2em; }
+  .content h2 { font-size: 1.1em; }
+  .content h3 { font-size: 1em; }
+  .content ul, .content ol { padding-left: 20px; margin: 6px 0 10px; }
+  .content li { margin: 3px 0; }
+  .content code {
+    font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+    font-size: 0.88em;
+    background: var(--vscode-textCodeBlock-background, rgba(255,255,255,0.08));
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .content pre {
+    background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.3));
+    border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.08));
+    border-radius: 5px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .content pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.9em;
+    line-height: 1.5;
+  }
+  .content strong { font-weight: 700; }
+  .content em { font-style: italic; }
+  .content blockquote {
+    border-left: 3px solid var(--vscode-focusBorder, #007acc);
+    margin: 8px 0;
+    padding: 4px 12px;
+    opacity: 0.8;
+  }
+  .content hr { border: none; border-top: 1px solid var(--vscode-panel-border, #333); margin: 12px 0; }
+
+  #input-area {
+    flex-shrink: 0;
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--vscode-panel-border, #333);
+    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  }
+
+  #input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  #input {
+    flex: 1;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border, transparent);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: inherit;
+    resize: none;
+    min-height: 36px;
+    max-height: 200px;
+    outline: none;
+    line-height: 1.5;
+    overflow-y: auto;
+  }
+  #input:focus { border-color: var(--vscode-focusBorder, #007acc); }
+  #input::placeholder { color: var(--vscode-input-placeholderForeground); opacity: 0.6; }
+
+  #send-btn {
+    background: var(--vscode-button-background, #007acc);
+    color: var(--vscode-button-foreground, #fff);
+    border: none;
+    border-radius: 5px;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: background 0.15s;
+    height: 36px;
+    white-space: nowrap;
+  }
+  #send-btn:hover { background: var(--vscode-button-hoverBackground, #0069b4); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #hint {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    opacity: 0.5;
+    margin-top: 5px;
+    text-align: right;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, rgba(255,255,255,0.2)); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Claude Agent</h1>
+  <button id="clear-btn" onclick="clearHistory()">Clear</button>
+</div>
+
+<div id="messages"></div>
+
+<div id="input-area">
+  <div id="input-row">
+    <textarea id="input" rows="1" placeholder="Ask Claude anything about your code..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button id="send-btn" onclick="sendMessage()">Send</button>
+  </div>
+  <div id="hint">Enter to send &nbsp;·&nbsp; Shift+Enter for newline</div>
+</div>
+
+<script>
+  const vscode = acquireVsCodeApi();
+  const messages = document.getElementById('messages');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('send-btn');
+
+  let busy = false;
+  let thinkingEl = null;
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderMarkdown(text) {
+    // Fenced code blocks
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+      return `<pre><code>${escapeHtml(code.trim())}</code></pre>`;
+    });
+    // Inline code
+    text = text.replace(/`([^`\n]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
+    // Bold
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    // Blockquote
+    text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+    // HR
+    text = text.replace(/^---+$/gm, '<hr>');
+    // Headers
+    text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // Bullet lists — group consecutive items
+    text = text.replace(/((?:^[-*] .+\n?)+)/gm, match => {
+      const items = match.trim().split('\n').map(l => `<li>${l.replace(/^[-*] /,'')}</li>`).join('');
+      return `<ul>${items}</ul>`;
+    });
+    // Numbered lists
+    text = text.replace(/((?:^\d+\. .+\n?)+)/gm, match => {
+      const items = match.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /,'')}</li>`).join('');
+      return `<ol>${items}</ol>`;
+    });
+    // Paragraphs: split on double newlines, wrap non-block in <p>
+    const blocks = text.split(/\n\n+/);
+    text = blocks.map(b => {
+      b = b.trim();
+      if (!b) return '';
+      if (/^<(h[1-6]|ul|ol|pre|blockquote|hr)/.test(b)) return b;
+      return `<p>${b.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n');
+    return text;
+  }
+
+  function addMessage(role, text) {
+    removeThinking();
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = role === 'user' ? 'You' : 'Claude';
+    const content = document.createElement('div');
+    content.className = 'content';
+    content.innerHTML = role === 'assistant' ? renderMarkdown(text) : escapeHtml(text).replace(/\n/g,'<br>');
+    wrap.appendChild(label);
+    wrap.appendChild(content);
+    messages.appendChild(wrap);
+    scrollToBottom();
+    return wrap;
+  }
+
+  function addToolCall(name, inputObj) {
+    removeThinking();
+    const el = document.createElement('div');
+    el.className = 'tool-call';
+    const inputStr = Object.entries(inputObj).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join(', ');
+    el.textContent = `${name}(${inputStr})`;
+    messages.appendChild(el);
+    scrollToBottom();
+  }
+
+  function showThinking() {
+    removeThinking();
+    thinkingEl = document.createElement('div');
+    thinkingEl.className = 'thinking-indicator';
+    thinkingEl.innerHTML = 'Claude is thinking <span class="dots"><span></span><span></span><span></span></span>';
+    messages.appendChild(thinkingEl);
+    scrollToBottom();
+  }
+
+  function removeThinking() {
+    if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+  }
+
+  function scrollToBottom() {
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function setBusy(b) {
+    busy = b;
+    sendBtn.disabled = b;
+    input.disabled = b;
+  }
+
+  function sendMessage() {
+    const text = input.value.trim();
+    if (!text || busy) return;
+    addMessage('user', text);
+    input.value = '';
+    input.style.height = '';
+    setBusy(true);
+    vscode.postMessage({ type: 'send', text });
+  }
+
+  function clearHistory() {
+    vscode.postMessage({ type: 'clear' });
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }
+
+  window.addEventListener('message', e => {
+    const msg = e.data;
+    if (msg.type === 'thinking') {
+      showThinking();
+    } else if (msg.type === 'assistant') {
+      addMessage('assistant', msg.text);
+    } else if (msg.type === 'tool_call') {
+      addToolCall(msg.name, msg.input);
+    } else if (msg.type === 'done') {
+      removeThinking();
+      setBusy(false);
+      input.focus();
+    } else if (msg.type === 'error') {
+      removeThinking();
+      const el = document.createElement('div');
+      el.style.cssText = 'padding:8px 16px;color:var(--vscode-errorForeground,#f48771);font-size:12px;';
+      el.textContent = 'Error: ' + msg.text;
+      messages.appendChild(el);
+      setBusy(false);
+    } else if (msg.type === 'cleared') {
+      messages.innerHTML = '';
+    }
+  });
+
+  input.focus();
+</script>
+</body>
+</html>

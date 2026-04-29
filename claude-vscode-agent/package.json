@@ -1,0 +1,32 @@
+{
+  "name": "claude-agent",
+  "displayName": "Claude Agent",
+  "description": "Claude AI coding assistant with workspace access",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "claudeAgent.open", "title": "Claude Agent: Open Chat" },
+      { "command": "claudeAgent.clear", "title": "Claude Agent: Clear History" }
+    ],
+    "keybindings": [
+      { "command": "claudeAgent.open", "key": "ctrl+shift+a", "mac": "cmd+shift+a" }
+    ],
+    "configuration": {
+      "title": "Claude Agent",
+      "properties": {
+        "claudeAgent.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key (or set ANTHROPIC_API_KEY env var)"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  }
+}

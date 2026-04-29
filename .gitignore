@@ -1,0 +1,11 @@
+# Claude Code internals
+.claude/
+
+# Skill files in root
+*.skill
+
+# Node
+node_modules/
+
+# Misc
+*.log
