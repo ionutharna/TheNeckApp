@@ -1,6 +1,6 @@
 name: TheNeckApp
 options:
-  bundleIdPrefix: tech.aiwizard
+  bundleIdPrefix: com.ioan
   deploymentTarget:
     iOS: "17.0"
   developmentLanguage: en
@@ -19,14 +19,19 @@ targets:
     platform: iOS
     sources:
       - path: TheNeckApp
+    entitlements:
+      path: TheNeckApp/TheNeckApp.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.aiwizard.TheNeckApp
+        PRODUCT_BUNDLE_IDENTIFIER: com.ioan.theneckapp
+        DEVELOPMENT_TEAM: VRHVJF3T9G
+        CODE_SIGN_ENTITLEMENTS: TheNeckApp/TheNeckApp.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMotionUsageDescription: "Pentru a măsura unghiul de flexie al gâtului în timpul utilizării telefonului."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIBackgroundModes: "fetch processing"
         TARGETED_DEVICE_FAMILY: "1"
 
   TheNeckAppTests:
@@ -38,5 +43,5 @@ targets:
       - target: TheNeckApp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: tech.aiwizard.TheNeckAppTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.ioan.theneckapp.tests
         GENERATE_INFOPLIST_FILE: YES
