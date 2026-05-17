@@ -1,9 +1,40 @@
 import SwiftUI
 
 struct HomeView: View {
+    @StateObject private var tilt = TiltSampler()
     @State private var animatedScore: Int = 0
-    private let targetScore = 847
-    private let trendValues = [720, 680, 810, 750, 830, 790, 847]
+
+    private let mockScreenSeconds = 8040
+    private let mockSessions: [PhoneSession] = [
+        PhoneSession(startedAt: Date(), durationSeconds: 1200),
+        PhoneSession(startedAt: Date(), durationSeconds: 900),
+        PhoneSession(startedAt: Date(), durationSeconds: 2820),
+        PhoneSession(startedAt: Date(), durationSeconds: 600)
+    ]
+
+    private var liveScore: DailyScore {
+        let agg = DailyAggregates(
+            screenSeconds: mockScreenSeconds,
+            sessions: mockSessions,
+            pitchSamples: tilt.samples.suffix(60).map { $0 },
+            dndExtendedMinutes: 0
+        )
+        return ScoreEngine.calculate(agg)
+    }
+
+    private var tiltStatusText: String {
+        switch tilt.currentFlexionDegrees {
+        case ..<15: return "unghi neutru"
+        case 15..<30: return "unghi mediu"
+        case 30..<45: return "flexie moderată"
+        case 45..<60: return "flexie severă"
+        default: return "extrem — ridică telefonul"
+        }
+    }
+
+    private var tiltOk: Bool {
+        tilt.currentFlexionDegrees < 30
+    }
 
     var body: some View {
         ZStack {
@@ -33,23 +64,23 @@ struct HomeView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
 
-                Sparkline(values: trendValues)
+                Sparkline(values: [720, 680, 810, 750, 830, 790, liveScore.totalScore])
                     .frame(height: 44)
                     .padding(.horizontal, 40)
 
                 VStack(spacing: 12) {
                     StatRow(icon: "clock.fill",
                             label: "2h 14m",
-                            status: "sub prag",
-                            ok: true)
+                            status: "durată: \(liveScore.durationScore)/450",
+                            ok: liveScore.durationScore > 300)
                     StatRow(icon: "iphone.gen3",
-                            label: "18°",
-                            status: "unghi bun",
-                            ok: true)
+                            label: String(format: "%.0f°", tilt.currentFlexionDegrees),
+                            status: tiltStatusText,
+                            ok: tiltOk)
                     StatRow(icon: "pause.circle.fill",
-                            label: "4 pauze",
-                            status: "1 sesiune 47m",
-                            ok: false)
+                            label: "\(mockSessions.count) pauze",
+                            status: "pauze: \(liveScore.breakScore)/300",
+                            ok: liveScore.breakScore > 200)
                 }
                 .padding(.horizontal, 24)
 
@@ -65,9 +96,18 @@ struct HomeView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
+            tilt.start()
             withAnimation(.easeOut(duration: 1.6)) {
-                animatedScore = targetScore
+                animatedScore = liveScore.totalScore
             }
+        }
+        .onChange(of: tilt.currentFlexionDegrees) {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                animatedScore = liveScore.totalScore
+            }
+        }
+        .onDisappear {
+            tilt.stop()
         }
     }
 }
@@ -86,6 +126,7 @@ private struct StatRow: View {
             Text(label)
                 .foregroundStyle(.white)
                 .fontWeight(.semibold)
+                .contentTransition(.numericText())
             Spacer()
             Text(ok ? "✓" : "⚠︎")
                 .foregroundStyle(ok ? .green : .yellow)
